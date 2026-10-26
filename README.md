@@ -1,8 +1,8 @@
 # companion-linking
 
-Connects a text-message AI companion to the user's Google Calendar and Gmail.
+A side project: a text-message agent that works with your Google Calendar and Gmail.
 
-The user texts in plain language. When a request needs Google access, the companion texts back a link, and the user approves it on their phone. The companion then answers the original request without being asked again. Claude does the reasoning through tool use, and the service is Python and FastAPI.
+You text it in plain language. When a request needs Google access, it texts back a link, you approve it on your phone, and it answers the original request without being asked again. Claude does the reasoning through tool use, and the service is Python and FastAPI.
 
 | Ask | Connect | Connected | It follows up |
 | --- | --- | --- | --- |
@@ -16,7 +16,7 @@ The screenshots come from a real run against a real Google account. Meeting titl
 
 ## Examples
 
-People can text it anything. It answers general questions itself and acts on Google through its tools, chaining them when one request needs several.
+You can text it anything. It answers general questions itself and acts on Google through its tools, chaining them when one request needs several.
 
 - Calendar: "whats on tmrw", "am i free friday after 5?", "add lunch w ana thursday at noon"
 - Email: "did the landlord ever reply?", "read me the second one", "which emails need a reply today?"
@@ -59,18 +59,3 @@ uv sync
 uv run pytest
 uv run ruff check . && uv run basedpyright
 ```
-
-## Not yet
-
-- Changing or cancelling events, inviting people, or calendars other than the main one.
-- Archiving, labeling or deleting email, and attachments.
-- Texting first. It replies when texted, or right after a link completes, so there are no reminders or morning briefings.
-- Big jobs in one turn. A turn is capped at 10 rounds of tool calls, so "go through today's unread" fits and "clean up my whole inbox" does not.
-- More than one Google account per user, or Outlook and iCloud.
-
-## Before launching to real users
-
-- `gmail.readonly` and `gmail.compose` are restricted scopes. Production use needs Google's app verification plus an annual security assessment from a Google-empanelled assessor.
-- Until the app is verified, it is limited to 100 test users, and each grant expires 7 days after consent.
-- The full conversation replays on each turn, with no compaction, so long histories grow in cost.
-- The per-user turn lock lives in one process, so run a single instance.
