@@ -14,14 +14,15 @@ The user texts in plain language. When a request needs Google access, the compan
 
 The screenshots come from a real run against a real Google account. Meeting titles, email subjects and the address are swapped for stand-ins.
 
-## What users can ask
+## Examples
 
-- "whats on tmrw" or "am i free friday after 5?"
-- "add lunch w ana thursday at noon"
-- "did the landlord ever reply?" or "anything from the school this week"
-- "read me the second one"
-- "tell ana yes for thursday": the companion drafts the reply, shows it, and sends it only after "yep send it"
-- "disconnect my email"
+People can text it anything. It answers general questions itself and acts on Google through its tools, chaining them when one request needs several.
+
+- Calendar: "whats on tmrw", "am i free friday after 5?", "add lunch w ana thursday at noon"
+- Email: "did the landlord ever reply?", "read me the second one", "which emails need a reply today?"
+- Both at once: "find my flight confirmation and put it on my calendar"
+- Sending: "tell ana yes for thursday" gets a draft first, and it sends only after "yep send it"
+- Account: "disconnect my email"
 
 ## How linking works
 
@@ -59,15 +60,17 @@ uv run pytest
 uv run ruff check . && uv run basedpyright
 ```
 
+## Not yet
+
+- Changing or cancelling events, inviting people, or calendars other than the main one.
+- Archiving, labeling or deleting email, and attachments.
+- Texting first. It replies when texted, or right after a link completes, so there are no reminders or morning briefings.
+- Big jobs in one turn. A turn is capped at 10 rounds of tool calls, so "go through today's unread" fits and "clean up my whole inbox" does not.
+- More than one Google account per user, or Outlook and iCloud.
+
 ## Before launching to real users
 
 - `gmail.readonly` and `gmail.compose` are restricted scopes. Production use needs Google's app verification plus an annual security assessment from a Google-empanelled assessor.
 - Until the app is verified, it is limited to 100 test users, and each grant expires 7 days after consent.
-
-## Limits
-
-- One Google account per user.
-- Google Calendar and Gmail only. Outlook and iCloud are not supported.
-- Events go on the user's own calendar. It does not invite others.
-- The full conversation replays on each turn, with no compaction.
+- The full conversation replays on each turn, with no compaction, so long histories grow in cost.
 - The per-user turn lock lives in one process, so run a single instance.
