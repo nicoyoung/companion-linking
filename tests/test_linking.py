@@ -3,6 +3,8 @@ partially consented to. Each of those must leave the user with a correct link st
 
 import base64
 import hashlib
+import html
+import re
 from datetime import timedelta
 from urllib.parse import parse_qs, urlparse
 
@@ -27,15 +29,22 @@ from tests.conftest import (
 )
 
 
-def test_connect_link_redirects_to_google_consent_with_pkce(
+def google_url_on(page_html: str) -> str:
+    match = re.search(r'class="cta" href="([^"]+)"', page_html)
+    assert match is not None
+    return html.unescape(match.group(1))
+
+
+def test_connect_page_sends_the_user_to_google_consent_with_pkce(
     app_client: TestClient, store: Store
 ) -> None:
     pending = store.create_pending_link(USER, Capability.CALENDAR)
 
-    response = app_client.get(f"/link/{pending.state}", follow_redirects=False)
+    response = app_client.get(f"/link/{pending.state}")
 
-    assert response.status_code == 302
-    query = parse_qs(urlparse(response.headers["location"]).query)
+    assert response.status_code == 200
+    assert '<meta property="og:title" content="Connect your Google Calendar">' in response.text
+    query = parse_qs(urlparse(google_url_on(response.text)).query)
     digest = hashlib.sha256(pending.code_verifier.encode()).digest()
     assert query["code_challenge"] == [base64.urlsafe_b64encode(digest).rstrip(b"=").decode()]
     assert query["code_challenge_method"] == ["S256"]
@@ -47,10 +56,11 @@ def test_connect_link_redirects_to_google_consent_with_pkce(
 def test_link_preview_fetch_does_not_spend_the_link(app_client: TestClient, store: Store) -> None:
     pending = store.create_pending_link(USER, Capability.CALENDAR)
 
-    preview = app_client.get(f"/link/{pending.state}", follow_redirects=False)
-    tap = app_client.get(f"/link/{pending.state}", follow_redirects=False)
+    preview = app_client.get(f"/link/{pending.state}")
+    tap = app_client.get(f"/link/{pending.state}")
 
-    assert preview.status_code == tap.status_code == 302
+    assert preview.status_code == tap.status_code == 200
+    assert google_url_on(preview.text) == google_url_on(tap.text)
 
 
 def test_callback_connects_calendar_and_companion_follows_up(
@@ -67,7 +77,7 @@ def test_callback_connects_calendar_and_companion_follows_up(
     )
 
     assert response.status_code == 200
-    assert "Connected" in response.text
+    assert "connected." in response.text
     exchange_body = parse_qs(exchange.calls.last.request.content.decode())
     assert exchange_body["code_verifier"] == [pending.code_verifier]
     link = store.get_link(USER)
@@ -94,7 +104,7 @@ def test_reloading_the_callback_page_does_not_exchange_twice(
     reload = app_client.get("/oauth/google/callback", params=params)
 
     assert reload.status_code == 200
-    assert "Already connected" in reload.text
+    assert "connected." in reload.text
     assert exchange.call_count == 1
     assert len(claude.requests) == 1
 
@@ -115,7 +125,7 @@ def test_expired_link_is_rejected_without_exchanging_the_code(
     exchange = mock_token_exchange(google, CALENDAR_SCOPES)
     clock.advance(timedelta(minutes=16))
 
-    tap = app_client.get(f"/link/{pending.state}", follow_redirects=False)
+    tap = app_client.get(f"/link/{pending.state}")
     callback = app_client.get(
         "/oauth/google/callback", params={"state": pending.state, "code": "auth-code"}
     )
@@ -150,7 +160,7 @@ def test_unchecked_scope_is_not_reported_as_connected(
         "/oauth/google/callback", params={"state": pending.state, "code": "auth-code"}
     )
 
-    assert "left unchecked" in response.text
+    assert "email access was unchecked" in response.text
     link = store.get_link(USER)
     assert link is not None
     assert not link.grants(Capability.EMAIL)

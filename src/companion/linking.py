@@ -47,6 +47,11 @@ class LinkResult(BaseModel):
                 return None
 
 
+class OpenLink(BaseModel):
+    capability: Capability
+    google_url: str
+
+
 class LinkFlow:
     def __init__(
         self,
@@ -60,10 +65,14 @@ class LinkFlow:
         self._session_for = session_for
         self._now = now
 
-    def authorization_url(self, state: str) -> str | None:
-        """Google's consent URL for an open link. Read-only, so link previews cannot spend it."""
+    def open_link(self, state: str) -> OpenLink | None:
+        """An unexpired link with its consent URL. Read-only, so link previews cannot spend it."""
         pending = self._store.open_pending_link(state)
-        return self._oauth.authorization_url(pending) if pending else None
+        if pending is None:
+            return None
+        return OpenLink(
+            capability=pending.capability, google_url=self._oauth.authorization_url(pending)
+        )
 
     async def complete(self, state: str, code: str | None) -> LinkResult:
         pending = self._store.consume_pending_link(state)

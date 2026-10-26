@@ -11,14 +11,23 @@ from zoneinfo import ZoneInfo
 import httpx
 from anthropic.lib.bedrock import AsyncAnthropicBedrock
 from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 
 from companion.agent import PROMPT_PATH, Companion, CompanionPrompt
 from companion.conversation import AssistantReply, UserText
 from companion.google_oauth import CodeExchangeError, GoogleOAuth
 from companion.google_session import GoogleSession
-from companion.linking import LinkFlow, LinkOutcome
+from companion.linking import LinkFlow, LinkOutcome, LinkResult
+from companion.pages import (
+    Page,
+    canceled_page,
+    connect_page,
+    connected_page,
+    exchange_failed_page,
+    expired_page,
+    scope_declined_page,
+)
 from companion.settings import Settings
 from companion.store import Store
 from companion.tools import ToolDeps, build_tools
@@ -27,16 +36,6 @@ logger = logging.getLogger(__name__)
 
 GOOGLE_TIMEOUT_SECONDS = 20.0
 CHAT_PAGE = Path(__file__).parent / "static" / "chat.html"
-
-_PAGES = {
-    LinkOutcome.CONNECTED: "Connected. You can go back to Messages.",
-    LinkOutcome.ALREADY_CONNECTED: "Already connected. You can go back to Messages.",
-    LinkOutcome.SCOPE_DECLINED: "That access was left unchecked, so it isn't connected yet."
-    " Go back to Messages and I'll send a new link.",
-    LinkOutcome.CANCELED: "Nothing was connected. You can go back to Messages.",
-    LinkOutcome.EXPIRED: "This link has expired. Text me and I'll send a new one.",
-}
-_EXCHANGE_FAILED_PAGE = "Something went wrong connecting Google. Text me for a new link."
 
 
 @dataclass(frozen=True)
@@ -155,11 +154,12 @@ def create_app(services_factory: ServicesFactory = production_services) -> FastA
         return lines
 
     @app.get("/link/{state}")
-    async def start_link(state: str, services: ServicesDep) -> Response:
-        url = services.link_flow.authorization_url(state)
-        if url is None:
-            return _page(_PAGES[LinkOutcome.EXPIRED], status_code=410)
-        return RedirectResponse(url, status_code=302)
+    async def start_link(state: str, services: ServicesDep) -> HTMLResponse:
+        """Explains the access before Google's screen; also what the Messages preview shows."""
+        link = services.link_flow.open_link(state)
+        if link is None:
+            return _html(expired_page(), status_code=410)
+        return _html(connect_page(link.capability, link.google_url), status_code=200)
 
     @app.get("/oauth/google/callback")
     async def finish_link(
@@ -172,19 +172,27 @@ def create_app(services_factory: ServicesFactory = production_services) -> FastA
             result = await services.link_flow.complete(state, code)
         except CodeExchangeError:
             logger.exception("Google code exchange failed")
-            return _page(_EXCHANGE_FAILED_PAGE, status_code=502)
+            return _html(exchange_failed_page(), status_code=502)
         event = result.event_for_companion
         if event is not None and result.user_id is not None:
             background.add_task(services.companion.handle_event, result.user_id, event)
         status = 410 if result.outcome is LinkOutcome.EXPIRED else 200
-        return _page(_PAGES[result.outcome], status_code=status)
+        return _html(_outcome_page(result), status_code=status)
 
     return app
 
 
-def _page(message: str, status_code: int) -> HTMLResponse:
-    html = (
-        '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">'
-        f'<body style="font:18px system-ui;padding:2rem;text-align:center">{message}</body>'
-    )
-    return HTMLResponse(html, status_code=status_code)
+def _outcome_page(result: LinkResult) -> Page:
+    match result.outcome:
+        case LinkOutcome.CONNECTED | LinkOutcome.ALREADY_CONNECTED:
+            return connected_page()
+        case LinkOutcome.SCOPE_DECLINED:
+            return scope_declined_page(result.capability)
+        case LinkOutcome.CANCELED:
+            return canceled_page()
+        case LinkOutcome.EXPIRED:
+            return expired_page()
+
+
+def _html(page: Page, status_code: int) -> HTMLResponse:
+    return HTMLResponse(page.render(), status_code=status_code)

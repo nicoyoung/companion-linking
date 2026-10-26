@@ -7,7 +7,7 @@
 <style>
   * { box-sizing: border-box; }
   body {
-    margin: 0; background: #e9e9ee;
+    margin: 0; background: #fff7f2;
     font: 16px/1.35 -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
   }
   .phone {
@@ -15,10 +15,14 @@
     display: flex; flex-direction: column;
   }
   header {
-    padding: 14px; text-align: center; font-weight: 600;
-    border-bottom: 1px solid #e5e5ea; background: #f9f9fb;
+    padding: 10px 14px 8px; text-align: center; font-size: 12px; color: #241f28;
+    border-bottom: 1px solid #ece4df; background: rgba(255, 247, 242, 0.92);
   }
-  header small { display: block; font-weight: 400; color: #8e8e93; font-size: 12px; }
+  .avatar {
+    width: 50px; height: 50px; margin: 0 auto 4px; border-radius: 50%;
+    background: linear-gradient(135deg, #ff5b3a, #ff8a2b); color: #fff;
+    font: 800 24px/50px -apple-system, "SF Pro Display", sans-serif;
+  }
   #thread { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 6px; }
   .bubble {
     max-width: 78%; padding: 8px 12px; border-radius: 18px;
@@ -41,7 +45,7 @@
 </head>
 <body>
 <div class="phone">
-  <header>Companion<small id="who"></small></header>
+  <header><div class="avatar">C</div>Companion &rsaquo;</header>
   <div id="thread"></div>
   <form id="composer">
     <input id="text" autocomplete="off" placeholder="Text Message" autofocus>
@@ -54,7 +58,6 @@
   const secret = localStorage.getItem("bridgeSecret") || prompt("Bridge secret");
   localStorage.setItem("userId", userId);
   localStorage.setItem("bridgeSecret", secret);
-  document.getElementById("who").textContent = userId;
 
   const thread = document.getElementById("thread");
   const headers = { "X-Bridge-Secret": secret, "Content-Type": "application/json" };
