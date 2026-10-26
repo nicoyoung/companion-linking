@@ -4,13 +4,14 @@ from collections.abc import AsyncIterator, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Annotated, Literal
 from zoneinfo import ZoneInfo
 
 import httpx
 from anthropic import AsyncAnthropic
 from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from pydantic import BaseModel
 
 from companion.agent import PROMPT_PATH, Companion, CompanionPrompt
@@ -25,6 +26,7 @@ from companion.tools import ToolDeps, build_tools
 logger = logging.getLogger(__name__)
 
 GOOGLE_TIMEOUT_SECONDS = 20.0
+CHAT_PAGE = Path(__file__).parent / "static" / "chat.html"
 
 _PAGES = {
     LinkOutcome.CONNECTED: "Connected. You can go back to Messages.",
@@ -125,6 +127,11 @@ def create_app(services_factory: ServicesFactory = production_services) -> FastA
     @app.get("/health")
     async def health() -> str:
         return "ok"
+
+    @app.get("/chat")
+    async def chat() -> FileResponse:
+        """A phone-style thread for trying the companion without a messaging bridge."""
+        return FileResponse(CHAT_PAGE)
 
     @app.post("/messages", dependencies=[Depends(require_bridge)])
     async def inbound(message: InboundText, services: ServicesDep) -> Reply:

@@ -1,17 +1,45 @@
 # companion-linking
 
-A timed experiment: how fast can a text-message AI companion get Google Calendar and Gmail linking live?
+Connects a text-message AI companion to the user's Google Calendar and Gmail.
 
-A user texts "what's on tomorrow?". The companion sees Google is not connected, texts back a link, and the user taps it on their phone and consents. When the callback lands, the companion answers the original question without being asked again. After that, Claude reads and adds calendar events, searches and reads email, and drafts replies through tool use. It sends a draft only after the user approves it in a later text.
+The user texts in plain language. When a request needs Google access, the companion texts back a link, and the user approves it on their phone. The companion then answers the original request without being asked again. Claude does the reasoning through tool use, and the service is Python and FastAPI.
+
+## What users can ask
+
+- "whats on tmrw" or "am i free friday after 5?"
+- "add lunch w ana thursday at noon"
+- "did the landlord ever reply?" or "anything from the school this week"
+- "read me the second one"
+- "tell ana yes for thursday": the companion drafts the reply, shows it, and sends it only after "yep send it"
+- "disconnect my email"
 
 ## How linking works
 
-1. The `connect_google` tool creates a single-use OAuth state (15 minutes) bound to the user and one capability (`calendar` or `email`). It asks only for what the current request needs.
-2. `GET /link/{state}` redirects to Google's consent screen with PKCE. It has no side effects, so the iMessage link preview cannot spend the link.
-3. `GET /oauth/google/callback` consumes the state, exchanges the code, and records the scopes the user actually granted. Google lets users uncheck boxes, so an unchecked capability is reported as not connected. Reloading the page is safe.
-4. Refresh tokens are encrypted at rest. Access tokens refresh before expiry. A revoked grant marks the link revoked, and the companion offers a new link.
+1. The companion asks only for the access the current request needs: `calendar` or `email`. The link it texts is single-use and expires in 15 minutes.
+2. Opening the link redirects to Google's consent screen with PKCE. The link has no side effects, so the iMessage link preview cannot use it up.
+3. The OAuth callback records the scopes the user actually granted. Google lets users uncheck boxes, so an unchecked capability is reported as not connected. Reloading the page is safe.
+4. Refresh tokens are encrypted at rest, and access tokens refresh before they expire. If the user revokes access from their Google account, the companion says so and offers a new link.
 
-## Run it
+## Safety
+
+- The prompt tells the companion to treat email content as information, never as instructions. The send check below holds even if the model slips.
+- The service refuses to send a draft until the user has texted again after seeing it. The model cannot bypass this check.
+- Each user's turns run one at a time, so two quick texts never interleave a tool call with its result.
+
+## Try it
+
+1. In Google Cloud Console, create a project and enable the Gmail API and the Google Calendar API.
+2. Configure the OAuth consent screen as External, in Testing, with your Google account as a test user.
+3. Create an OAuth client of type Web application.
+4. Start a tunnel: `brew install cloudflared && cloudflared tunnel --url http://localhost:8000`.
+5. Add `<tunnel URL>/oauth/google/callback` to the client's authorized redirect URIs.
+6. Copy `.env.example` to `.env` and fill it in.
+7. Start the app: `uv run uvicorn companion.app:create_app --factory --env-file .env --port 8000`.
+8. Open `<tunnel URL>/chat` on your phone and text it.
+
+`/chat` is a stand-in for a messaging bridge. A real bridge posts each inbound text to `POST /messages` with the `X-Bridge-Secret` header and delivers the reply. It also reads `GET /users/{user_id}/transcript` for replies sent outside a request, such as the follow-up after linking.
+
+## Development
 
 ```bash
 uv sync
@@ -19,42 +47,15 @@ uv run pytest
 uv run ruff check . && uv run basedpyright
 ```
 
-To run it live:
+## Before launching to real users
 
-1. In Google Cloud Console, create a project, enable the Gmail API and the Google Calendar API, and configure the OAuth consent screen (External, Testing, with your Google account as a test user).
-2. Create an OAuth client of type Web application.
-3. Start a tunnel: `brew install cloudflared && cloudflared tunnel --url http://localhost:8000`.
-4. Add `<tunnel URL>/oauth/google/callback` to the OAuth client's authorized redirect URIs.
-5. Copy `.env.example` to `.env` and fill it in.
-6. Start the app: `uv run uvicorn companion.app:create_app --factory --env-file .env --port 8000`.
-7. Text as a user through the bridge endpoint, then open the link it sends on your phone:
+- `gmail.readonly` and `gmail.compose` are restricted scopes. Production use needs Google's app verification plus an annual security assessment from a Google-empanelled assessor.
+- Until the app is verified, it is limited to 100 test users, and each grant expires 7 days after consent.
 
-```bash
-curl -s localhost:8000/messages -H "X-Bridge-Secret: $SECRET" \
-  -H 'content-type: application/json' -d '{"user_id": "+15555550100", "text": "whats on tmrw"}'
-curl -s localhost:8000/users/+15555550100/transcript -H "X-Bridge-Secret: $SECRET"
-```
+## Limits
 
-The transcript endpoint shows replies sent outside a request, such as the follow-up after linking.
-
-## What stands between this and real users
-
-Google gates the scopes, not the code:
-
-- `gmail.readonly` and `gmail.compose` are restricted scopes. Production use needs Google's verification plus an annual security assessment from a Google-empanelled assessor.
-- Until the app is verified, a Testing-status app is capped at 100 test users, and every grant expires 7 days after consent.
-
-## Not built
-
-- A real iMessage bridge. `POST /messages` stands in for it.
-- Outlook and iCloud calendars.
-- Multiple Google accounts per user, and inviting others to events.
-- Conversation compaction. The full history replays each turn.
-- Multi-process deploys. The per-user turn lock lives in one process.
-
-## Timing log
-
-| Time (EDT, 2026-10-26) | Milestone |
-| --- | --- |
-| 13:52 | Start |
-| 14:13 | Code complete: linking flow, Calendar and Gmail tools, agent loop; 30 tests, lint and typecheck clean |
+- One Google account per user.
+- Google Calendar and Gmail only. Outlook and iCloud are not supported.
+- Events go on the user's own calendar. It does not invite others.
+- The full conversation replays on each turn, with no compaction.
+- The per-user turn lock lives in one process, so run a single instance.
