@@ -8,7 +8,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 import yaml
-from anthropic import AsyncAnthropic
+from anthropic.lib.bedrock import AsyncAnthropicBedrock
 from anthropic.lib.tools import BetaAsyncFunctionTool, ToolError
 from anthropic.types.beta import (
     BetaMessageParam,
@@ -53,14 +53,14 @@ class CompanionPrompt(BaseModel):
 class Companion:
     def __init__(
         self,
-        anthropic: AsyncAnthropic,
+        bedrock: AsyncAnthropicBedrock,
         model: str,
         prompt: CompanionPrompt,
         store: Store,
         tools_for: ToolsFactory,
         now: Callable[[], datetime],
     ):
-        self._anthropic = anthropic
+        self._bedrock = bedrock
         self._model = model
         self._prompt = prompt
         self._store = store
@@ -85,7 +85,7 @@ class Companion:
         timezone = ZoneInfo(link.timezone) if link and link.timezone else UNKNOWN_TIMEZONE
         tools = {tool.name: tool for tool in self._tools_for(user_id, timezone)}
         for _ in range(MAX_TOOL_ROUNDS):
-            response = await self._anthropic.beta.messages.create(
+            response = await self._bedrock.beta.messages.create(
                 model=self._model,
                 max_tokens=MAX_TOKENS,
                 system=[
@@ -99,8 +99,6 @@ class Companion:
                 tools=[tool.to_dict() for tool in tools.values()],
                 messages=self._history(user_id),
                 output_config={"effort": "medium"},
-                betas=["server-side-fallback-2026-07-01"],
-                fallbacks="default",
             )
             if response.stop_reason == "refusal":
                 return self._say(user_id, REFUSAL_REPLY)

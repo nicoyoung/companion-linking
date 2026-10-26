@@ -9,7 +9,8 @@ import httpx
 import httpx2
 import pytest
 import respx
-from anthropic import AsyncAnthropic, DefaultAsyncHttpxClient
+from anthropic import DefaultAsyncHttpxClient
+from anthropic.lib.bedrock import AsyncAnthropicBedrock
 from anthropic.types.beta import (
     BetaContentBlock,
     BetaMessage,
@@ -73,10 +74,12 @@ class ScriptedClaude:
         thinking = BetaThinkingBlock(type="thinking", thinking="", signature="sig")
         self._queue([thinking, tool_use], "tool_use")
 
-    def client(self) -> AsyncAnthropic:
+    def client(self) -> AsyncAnthropicBedrock:
         transport = httpx2.MockTransport(self._handle)
-        return AsyncAnthropic(
-            api_key="test-key",
+        return AsyncAnthropicBedrock(
+            aws_access_key="test-access-key",
+            aws_secret_key="test-secret-key",
+            aws_region="us-east-1",
             http_client=DefaultAsyncHttpxClient(transport=transport),
             max_retries=0,
         )
@@ -87,7 +90,7 @@ class ScriptedClaude:
                 id=f"msg_{len(self.replies)}",
                 type="message",
                 role="assistant",
-                model="claude-opus-5-5",
+                model="us.anthropic.claude-haiku-5-5",
                 content=content,
                 stop_reason=stop_reason,
                 usage=BetaUsage(input_tokens=1, output_tokens=1),
@@ -112,7 +115,6 @@ def settings(tmp_path: Any) -> Settings:
         public_base_url="https://companion.test",
         token_encryption_key=SecretStr(Fernet.generate_key().decode()),
         bridge_secret=SecretStr(BRIDGE_SECRET),
-        anthropic_api_key=SecretStr("test-key"),
         database_path=tmp_path / "companion.db",
     )
 
@@ -163,7 +165,7 @@ def claude() -> ScriptedClaude:
 def companion(claude: ScriptedClaude, store: Store, tool_deps: ToolDeps, clock: Clock) -> Companion:
     return Companion(
         claude.client(),
-        "claude-opus-5-5",
+        "us.anthropic.claude-haiku-5-5",
         CompanionPrompt.from_yaml(PROMPT_PATH),
         store,
         lambda user_id, timezone: build_tools(tool_deps, user_id, timezone),

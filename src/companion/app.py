@@ -9,7 +9,7 @@ from typing import Annotated, Literal
 from zoneinfo import ZoneInfo
 
 import httpx
-from anthropic import AsyncAnthropic
+from anthropic.lib.bedrock import AsyncAnthropicBedrock
 from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from pydantic import BaseModel
@@ -75,7 +75,7 @@ async def production_services() -> AsyncIterator[Services]:
 
     async with (
         httpx.AsyncClient(timeout=GOOGLE_TIMEOUT_SECONDS) as http,
-        AsyncAnthropic(api_key=settings.anthropic_api_key.get_secret_value()) as anthropic,
+        AsyncAnthropicBedrock(aws_region=settings.aws_region) as bedrock,
     ):
         store = Store(settings.database_path, settings.token_encryption_key, now)
         oauth = GoogleOAuth(
@@ -97,7 +97,7 @@ async def production_services() -> AsyncIterator[Services]:
             settings=settings,
             store=store,
             link_flow=LinkFlow(store, oauth, session_for, now),
-            companion=Companion(anthropic, settings.model, prompt, store, tools_for, now),
+            companion=Companion(bedrock, settings.model, prompt, store, tools_for, now),
         )
 
 

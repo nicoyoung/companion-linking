@@ -12,9 +12,9 @@ class Settings(BaseModel):
     public_base_url: str
     token_encryption_key: SecretStr
     bridge_secret: SecretStr
-    anthropic_api_key: SecretStr
+    aws_region: str = "us-east-1"
     database_path: Path = Path("companion.db")
-    model: str = "claude-opus-5-5"
+    model: str = "us.anthropic.claude-haiku-5-5"
 
     @classmethod
     def from_environment(cls) -> "Settings":
